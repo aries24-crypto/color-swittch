@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Color Switch Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+    <style>
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #111; }
+        canvas { border: 4px solid #333; border-radius: 10px; }
+    </style>
+</head>
+<body>
+<script>
+// --- GAME CONFIG ---
+const config = {
+    type: Phaser.AUTO,
+    width: 400,
+    height: 600,
+    physics: { default: 'arcade', arcade: { gravity: { y: 900 } } },
+    scene: { preload, create, update }
+};
+
+const game = new Phaser.Game(config);
+let player, obstacles, colors, score = 0, scoreText;
+
+function preload() {}
+
+function create() {
+    colors = [0xff0080, 0x32cd32, 0x00bfff, 0xffd700]; // Pink, Green, Blue, Yellow
+    
+    // Create Ball
+    const ballGfx = this.make.graphics().fillStyle(0xffffff).fillCircle(10, 10, 10);
+    ballGfx.generateTexture('ball', 20, 20);
+    
+    player = this.physics.add.sprite(200, 500, 'ball');
+    player.setCircle(10);
+    changePlayerColor();
+
+    // Groups
+    obstacles = this.add.group();
+
+    // Create 5 obstacles going up
+    for(let i = 0; i < 5; i++) {
+        createCircleObstacle(this, 200, 200 - (i * 400));
+    }
+
+    // Score
+    scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '24px', fill: '#fff' }).setScrollFactor(0);
+
+    // Controls
+    this.input.on('pointerdown', () => player.setVelocityY(-300));
+
+    // Camera
+    this.cameras.main.startFollow(player, true, 0, 0.1, 0, 150);
+}
+
+function createCircleObstacle(scene, x, y) {
+    const radius = 70;
+    const thickness = 12;
+    
+    for (let i = 0; i < 4; i++) {
+        // Create 4 arcs to make a full circle
+        const section = scene.add.arc(x, y, radius, i * 90, (i + 1) * 90, false);
+        section.setStrokeStyle(thickness, colors[i]);
+        
+        scene.physics.add.existing(section);
+        section.body.setAllowGravity(false).setImmovable(true);
+        section.color = colors[i];
+        
+        // Custom property to help with rotation logic
+        section.angleOffset = i * 90;
+        obstacles.add(section);
+    }
+}
+
+function update() {
+    // Spin Obstacles
+    obstacles.getChildren().forEach(section => {
+        section.angle += 1.5;
+    });
+
+    // Win/Loss Logic
+    this.physics.overlap(player, obstacles, (p, section) => {
+        if (p.tintTopLeft !== section.color) {
+            this.scene.restart();
+            score = 0;
+        }
+    });
+
+    // Infinite Score Logic (Simple version)
+    if (player.y < (200 - (score * 400)) + 50) {
+        score++;
+        scoreText.setText('Score: ' + score);
+        changePlayerColor();
+    }
+
+    // Fall out of bounds
+    if (player.y > 650) {
+        this.scene.restart();
+        score = 0;
+    }
+}
+
+function changePlayerColor() {
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    player.setTint(randomColor);
+}
+
+</script>
+</body>
+</html>
