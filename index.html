@@ -3,93 +3,405 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Color Switch - Space to Jump</title>
+    <title>Flappy Bird Adventure</title>
     <style>
-        :root { --bg-color: #121212; --text-color: #ffffff; }
-        * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
-        body { background-color: var(--bg-color); color: var(--text-color); font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        #game-container { position: relative; width: 100%; max-width: 400px; height: 100%; max-height: 800px; background: #000; border-left: 1px solid #333; border-right: 1px solid #333; }
-        canvas { width: 100%; height: 100%; display: block; }
-        #ui { position: absolute; top: 30px; left: 0; width: 100%; text-align: center; pointer-events: none; z-index: 10; }
-        #score { font-size: 60px; font-weight: 800; opacity: 0.8; }
-        #menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; backdrop-filter: blur(5px); }
-        #menu.hidden { display: none; }
-        h1 { font-size: 36px; margin-bottom: 10px; letter-spacing: 4px; color: #FF0080; }
-        p.instructions { margin-bottom: 30px; color: #aaa; font-size: 14px; }
-        .btn { padding: 18px 50px; font-size: 20px; background: #fff; color: #000; border: none; border-radius: 40px; cursor: pointer; font-weight: bold; text-transform: uppercase; }
-        #final-score { margin-bottom: 20px; font-size: 28px; font-weight: bold; }
+        :root {
+            --sky-blue: #70c5ce;
+            --white: #ffffff;
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #333;
+            font-family: var(--font-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            touch-action: none;
+        }
+
+        #game-wrapper {
+            position: relative;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background-color: var(--sky-blue);
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #score-text {
+            position: absolute;
+            top: 20px;
+            font-size: 50px;
+            font-weight: 900;
+            color: white;
+            text-shadow: 3px 3px 0 #000;
+            z-index: 5;
+        }
+
+        .menu-box {
+            background: rgba(222, 216, 149, 0.95);
+            border: 4px solid #533846;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 200px;
+        }
+
+        h1 { margin: 0 0 20px 0; color: #e86101; text-shadow: 2px 2px 0 #fff; font-size: 32px; }
+
+        .btn {
+            background: #f7951e;
+            border: 3px solid #fff;
+            color: white;
+            padding: 12px 24px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 8px;
+            box-shadow: 0 4px 0 #d67d00;
+            transition: transform 0.1s;
+        }
+
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+
+        .stats { margin: 15px 0; font-size: 18px; color: #533846; font-weight: bold; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
-    <div id="game-container">
-        <div id="ui"><div id="score">0</div></div>
-        <div id="menu">
-            <h1 id="menu-title">COLOR SWITCH</h1>
-            <p class="instructions">PRESS SPACE, TAP, OR CLICK TO JUMP</p>
-            <div id="final-score" class="hidden">0</div>
-            <button id="start-btn" class="btn">PLAY</button>
+
+<div id="game-wrapper">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-overlay">
+        <div id="score-text">0</div>
+
+        <!-- Start Menu -->
+        <div id="start-menu" class="menu-box">
+            <h1>FLAPPY BIRD</h1>
+            <div class="stats">Avoid the pipes!</div>
+            <button id="start-btn" class="btn">START GAME</button>
         </div>
-        <canvas id="gameCanvas"></canvas>
+
+        <!-- Game Over Menu -->
+        <div id="game-over-menu" class="menu-box hidden">
+            <h1>GAME OVER</h1>
+            <div class="stats">
+                Score: <span id="current-score">0</span><br>
+                Best: <span id="best-score">0</span>
+            </div>
+            <button id="restart-btn" class="btn">RETRY</button>
+        </div>
     </div>
+</div>
 
 <script>
+/**
+ * FLAPPY BIRD ADVENTURE
+ * Fixed: Variable initialization to prevent 'forEach' of undefined errors
+ */
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const scoreEl = document.getElementById('score');
-const menu = document.getElementById('menu');
-const startBtn = document.getElementById('start-btn');
-const finalScoreEl = document.getElementById('final-score');
-const menuTitle = document.getElementById('menu-title');
+const scoreText = document.getElementById('score-text');
+const startMenu = document.getElementById('start-menu');
+const gameOverMenu = document.getElementById('game-over-menu');
 
-const COLORS = ['#FF0080', '#32CD32', '#00BFFF', '#FFD700']; 
-const GRAVITY = 0.24;
-const JUMP_FORCE = -5.8;
-const PLAYER_RADIUS = 12;
-const OBSTACLE_SPACING = 380;
+// --- Configuration ---
+const WIDTH = 360;
+const HEIGHT = 580;
+const GRAVITY = 0.25;
+const FLAP_STRENGTH = -5;
+const PIPE_SPEED = 2.5;
+const PIPE_SPAWN_RATE = 100; // frames
+const PIPE_GAP = 150;
 
+canvas.width = WIDTH;
+canvas.height = HEIGHT;
+
+// --- Game State ---
 let gameState = 'START';
 let score = 0;
-let player = { x: 0, y: 0, vy: 0, colorIndex: 0, color: '' };
-let obstacles = [];
-let cameraY = 0;
-let viewportWidth, viewportHeight;
-let audioCtx = null;
+let highScore = localStorage.getItem('flappyHighScore') || 0;
+let frameCount = 0;
 
-function resize() {
-    const container = document.getElementById('game-container');
-    viewportWidth = container.clientWidth;
-    viewportHeight = container.clientHeight;
-    canvas.width = viewportWidth;
-    canvas.height = viewportHeight;
-}
-window.addEventListener('resize', resize);
-resize();
-
-function playSound(freq, type = 'sine', duration = 0.1) {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// --- Audio Simulation (Web Audio API) ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playTone(freq, type, duration, vol = 0.05) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = type;
     osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
     osc.start();
     osc.stop(audioCtx.currentTime + duration);
 }
 
-class Obstacle {
-    constructor(y) {
-        this.y = y;
-        this.rotation = 0;
-        this.speed = 0.015 + (Math.random() * 0.02);
-        this.passed = false;
-        this.type = Math.random() > 0.5 ? 'circle' : 'square';
+const SFX = {
+    flap: () => playTone(400, 'triangle', 0.1),
+    score: () => { playTone(600, 'sine', 0.1); setTimeout(() => playTone(800, 'sine', 0.2), 50); },
+    hit: () => playTone(150, 'sawtooth', 0.3)
+};
+
+class Bird {
+    constructor() {
+        this.reset();
     }
-    update() { this.rotation += this.speed; }
+    reset() {
+        this.x = 50;
+        this.y = HEIGHT / 2;
+        this.size = 24;
+        this.velocity = 0;
+        this.rotation = 0;
+    }
+    flap() {
+        this.velocity = FLAP_STRENGTH;
+        SFX.flap();
+    }
+    update() {
+        this.velocity += GRAVITY;
+        this.y += this.velocity;
+        
+        // Tilt based on velocity
+        this.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, this.velocity * 0.1));
+
+        // Floor/Ceiling collision
+        if (this.y + this.size/2 > HEIGHT - 20 || this.y - this.size/2 < 0) {
+            return true;
+        }
+        return false;
+    }
     draw() {
-        const cx = viewportWidth / 2;
-        const cy = this.y - cameraY;
-        if (cy < -300 || cy
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+        
+        // Body (Yellow)
+        ctx.fillStyle = '#fce205';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.size/2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Eye
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(6, -4, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(8, -4, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Wing
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.ellipse(-6, 2, 8, 5, -this.rotation, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Beak (Orange)
+        ctx.fillStyle = '#f7951e';
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(18, 2);
+        ctx.lineTo(10, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+    }
+}
+
+class Pipe {
+    constructor(x) {
+        this.x = x;
+        this.width = 60;
+        this.topHeight = Math.random() * (HEIGHT - PIPE_GAP - 120) + 60;
+        this.passed = false;
+    }
+    update() {
+        this.x -= PIPE_SPEED;
+    }
+    draw() {
+        ctx.fillStyle = '#73bf2e';
+        ctx.strokeStyle = '#533846';
+        ctx.lineWidth = 3;
+
+        // Top Pipe
+        ctx.fillRect(this.x, 0, this.width, this.topHeight);
+        ctx.strokeRect(this.x, 0, this.width, this.topHeight);
+        // Top Pipe Lip
+        ctx.fillRect(this.x - 5, this.topHeight - 20, this.width + 10, 20);
+        ctx.strokeRect(this.x - 5, this.topHeight - 20, this.width + 10, 20);
+
+        // Bottom Pipe
+        const bottomY = this.topHeight + PIPE_GAP;
+        ctx.fillRect(this.x, bottomY, this.width, HEIGHT - bottomY);
+        ctx.strokeRect(this.x, bottomY, this.width, HEIGHT - bottomY);
+        // Bottom Pipe Lip
+        ctx.fillRect(this.x - 5, bottomY, this.width + 10, 20);
+        ctx.strokeRect(this.x - 5, bottomY, this.width + 10, 20);
+    }
+    isColliding(bird) {
+        if (bird.x + bird.size/2 > this.x && bird.x - bird.size/2 < this.x + this.width) {
+            if (bird.y - bird.size/2 < this.topHeight || bird.y + bird.size/2 > this.topHeight + PIPE_GAP) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+// Pre-initialize variables so the loop can run immediately without errors
+let bird = new Bird();
+let pipes = [];
+let particles = [];
+
+function init() {
+    bird.reset();
+    pipes = [];
+    particles = [];
+    score = 0;
+    frameCount = 0;
+    scoreText.innerText = '0';
+}
+
+function startGame() {
+    init();
+    gameState = 'PLAYING';
+    startMenu.classList.add('hidden');
+    gameOverMenu.classList.add('hidden');
+    scoreText.classList.remove('hidden');
+}
+
+function endGame() {
+    gameState = 'GAMEOVER';
+    SFX.hit();
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('flappyHighScore', highScore);
+    }
+    document.getElementById('current-score').innerText = score;
+    document.getElementById('best-score').innerText = highScore;
+    gameOverMenu.classList.remove('hidden');
+}
+
+function handleInput() {
+    if (gameState === 'PLAYING') {
+        bird.flap();
+    } else if (gameState === 'START') {
+        startGame();
+    }
+}
+
+// Listeners
+window.addEventListener('keydown', (e) => { if(e.code === 'Space') handleInput(); });
+canvas.addEventListener('mousedown', handleInput);
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(); }, {passive: false});
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+
+function update() {
+    if (gameState === 'PLAYING') {
+        frameCount++;
+        
+        if (bird.update()) {
+            endGame();
+        }
+
+        // Handle Pipes
+        if (frameCount % PIPE_SPAWN_RATE === 0) {
+            pipes.push(new Pipe(WIDTH));
+        }
+
+        for (let i = pipes.length - 1; i >= 0; i--) {
+            pipes[i].update();
+            
+            if (pipes[i].isColliding(bird)) {
+                endGame();
+            }
+
+            if (!pipes[i].passed && pipes[i].x + pipes[i].width < bird.x) {
+                pipes[i].passed = true;
+                score++;
+                scoreText.innerText = score;
+                SFX.score();
+            }
+
+            if (pipes[i].x + pipes[i].width < -100) {
+                pipes.splice(i, 1);
+            }
+        }
+    }
+}
+
+function drawBackground() {
+    // Sun
+    ctx.fillStyle = '#ffdbac';
+    ctx.beginPath();
+    ctx.arc(WIDTH - 50, 50, 30, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ground
+    ctx.fillStyle = '#ded895';
+    ctx.fillRect(0, HEIGHT - 20, WIDTH, 20);
+    ctx.fillStyle = '#9ce35b';
+    ctx.fillRect(0, HEIGHT - 25, WIDTH, 5);
+}
+
+function loop() {
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+    
+    drawBackground();
+    
+    // Safety check: only draw if array exists (though we initialized them above)
+    if (pipes) pipes.forEach(p => p.draw());
+    if (bird) bird.draw();
+    
+    update();
+    requestAnimationFrame(loop);
+}
+
+// Start the loop
+loop();
+</script>
+</body>
+</html>
