@@ -1,110 +1,95 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Color Switch Pro</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Color Switch - Space to Jump</title>
     <style>
-        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #111; }
-        canvas { border: 4px solid #333; border-radius: 10px; }
+        :root { --bg-color: #121212; --text-color: #ffffff; }
+        * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
+        body { background-color: var(--bg-color); color: var(--text-color); font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        #game-container { position: relative; width: 100%; max-width: 400px; height: 100%; max-height: 800px; background: #000; border-left: 1px solid #333; border-right: 1px solid #333; }
+        canvas { width: 100%; height: 100%; display: block; }
+        #ui { position: absolute; top: 30px; left: 0; width: 100%; text-align: center; pointer-events: none; z-index: 10; }
+        #score { font-size: 60px; font-weight: 800; opacity: 0.8; }
+        #menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; backdrop-filter: blur(5px); }
+        #menu.hidden { display: none; }
+        h1 { font-size: 36px; margin-bottom: 10px; letter-spacing: 4px; color: #FF0080; }
+        p.instructions { margin-bottom: 30px; color: #aaa; font-size: 14px; }
+        .btn { padding: 18px 50px; font-size: 20px; background: #fff; color: #000; border: none; border-radius: 40px; cursor: pointer; font-weight: bold; text-transform: uppercase; }
+        #final-score { margin-bottom: 20px; font-size: 28px; font-weight: bold; }
     </style>
 </head>
 <body>
+    <div id="game-container">
+        <div id="ui"><div id="score">0</div></div>
+        <div id="menu">
+            <h1 id="menu-title">COLOR SWITCH</h1>
+            <p class="instructions">PRESS SPACE, TAP, OR CLICK TO JUMP</p>
+            <div id="final-score" class="hidden">0</div>
+            <button id="start-btn" class="btn">PLAY</button>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
 <script>
-// --- GAME CONFIG ---
-const config = {
-    type: Phaser.AUTO,
-    width: 400,
-    height: 600,
-    physics: { default: 'arcade', arcade: { gravity: { y: 900 } } },
-    scene: { preload, create, update }
-};
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const menu = document.getElementById('menu');
+const startBtn = document.getElementById('start-btn');
+const finalScoreEl = document.getElementById('final-score');
+const menuTitle = document.getElementById('menu-title');
 
-const game = new Phaser.Game(config);
-let player, obstacles, colors, score = 0, scoreText;
+const COLORS = ['#FF0080', '#32CD32', '#00BFFF', '#FFD700']; 
+const GRAVITY = 0.24;
+const JUMP_FORCE = -5.8;
+const PLAYER_RADIUS = 12;
+const OBSTACLE_SPACING = 380;
 
-function preload() {}
+let gameState = 'START';
+let score = 0;
+let player = { x: 0, y: 0, vy: 0, colorIndex: 0, color: '' };
+let obstacles = [];
+let cameraY = 0;
+let viewportWidth, viewportHeight;
+let audioCtx = null;
 
-function create() {
-    colors = [0xff0080, 0x32cd32, 0x00bfff, 0xffd700]; // Pink, Green, Blue, Yellow
-    
-    // Create Ball
-    const ballGfx = this.make.graphics().fillStyle(0xffffff).fillCircle(10, 10, 10);
-    ballGfx.generateTexture('ball', 20, 20);
-    
-    player = this.physics.add.sprite(200, 500, 'ball');
-    player.setCircle(10);
-    changePlayerColor();
+function resize() {
+    const container = document.getElementById('game-container');
+    viewportWidth = container.clientWidth;
+    viewportHeight = container.clientHeight;
+    canvas.width = viewportWidth;
+    canvas.height = viewportHeight;
+}
+window.addEventListener('resize', resize);
+resize();
 
-    // Groups
-    obstacles = this.add.group();
-
-    // Create 5 obstacles going up
-    for(let i = 0; i < 5; i++) {
-        createCircleObstacle(this, 200, 200 - (i * 400));
-    }
-
-    // Score
-    scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '24px', fill: '#fff' }).setScrollFactor(0);
-
-    // Controls
-    this.input.on('pointerdown', () => player.setVelocityY(-300));
-
-    // Camera
-    this.cameras.main.startFollow(player, true, 0, 0.1, 0, 150);
+function playSound(freq, type = 'sine', duration = 0.1) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
 }
 
-function createCircleObstacle(scene, x, y) {
-    const radius = 70;
-    const thickness = 12;
-    
-    for (let i = 0; i < 4; i++) {
-        // Create 4 arcs to make a full circle
-        const section = scene.add.arc(x, y, radius, i * 90, (i + 1) * 90, false);
-        section.setStrokeStyle(thickness, colors[i]);
-        
-        scene.physics.add.existing(section);
-        section.body.setAllowGravity(false).setImmovable(true);
-        section.color = colors[i];
-        
-        // Custom property to help with rotation logic
-        section.angleOffset = i * 90;
-        obstacles.add(section);
+class Obstacle {
+    constructor(y) {
+        this.y = y;
+        this.rotation = 0;
+        this.speed = 0.015 + (Math.random() * 0.02);
+        this.passed = false;
+        this.type = Math.random() > 0.5 ? 'circle' : 'square';
     }
-}
-
-function update() {
-    // Spin Obstacles
-    obstacles.getChildren().forEach(section => {
-        section.angle += 1.5;
-    });
-
-    // Win/Loss Logic
-    this.physics.overlap(player, obstacles, (p, section) => {
-        if (p.tintTopLeft !== section.color) {
-            this.scene.restart();
-            score = 0;
-        }
-    });
-
-    // Infinite Score Logic (Simple version)
-    if (player.y < (200 - (score * 400)) + 50) {
-        score++;
-        scoreText.setText('Score: ' + score);
-        changePlayerColor();
-    }
-
-    // Fall out of bounds
-    if (player.y > 650) {
-        this.scene.restart();
-        score = 0;
-    }
-}
-
-function changePlayerColor() {
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
-    player.setTint(randomColor);
-}
-
-</script>
-</body>
-</html>
+    update() { this.rotation += this.speed; }
+    draw() {
+        const cx = viewportWidth / 2;
+        const cy = this.y - cameraY;
+        if (cy < -300 || cy
